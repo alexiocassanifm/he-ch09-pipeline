@@ -83,8 +83,11 @@ def main() -> int:
             result = event
 
     # Untracked files count as changes too: mark them intent-to-add, then diff.
+    # The pinned Claude Code lives in tools/node_modules inside the checkout;
+    # it is gitignored, and excluded here as well so a patch never carries it.
     sh("git", "add", "--intent-to-add", "--all", check=False)
-    (args.out / "patch.diff").write_text(sh("git", "diff", "--binary", base))
+    (args.out / "patch.diff").write_text(
+        sh("git", "diff", "--binary", base, "--", ".", ":(exclude)tools/node_modules"))
 
     record = {
         "task_id": task_id,
@@ -112,7 +115,11 @@ def main() -> int:
         "runner": {k: os.environ.get(k) for k in ("ImageOS", "ImageVersion", "RUNNER_OS")},
     }
     (args.out / "run.json").write_text(json.dumps(record, indent=2) + "\n")
-    print(json.dumps({k: record[k] for k in ("task_id", "trial", "models_served", "is_error", "num_turns")}))
+    print(json.dumps({k: record[k] for k in ("task_id", "trial", "models_served", "is_error",
+                                               "num_turns", "terminal_reason", "exit_code")}))
+    if record["is_error"]:
+        # The log is public on a public repository: print the tail, never the environment.
+        print("claude stderr (tail):\n" + proc.stderr[-1500:])
     # Always exit 0: a failed agent run is a result to grade, not a broken job.
     return 0
 
