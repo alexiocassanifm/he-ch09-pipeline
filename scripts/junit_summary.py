@@ -10,9 +10,11 @@ claim: whether the job passed comes from GitHub's own job results.
 """
 import json
 import sys
-import xml.etree.ElementTree as ET  # nosemgrep: use-defused-xml-parse
+import xml.etree.ElementTree as ET
 
-root = ET.parse(sys.argv[1]).getroot()
+# Parsed in the job that already ran the patch's own tests: hostile XML here can
+# do nothing that code could not. The job that signs the bundle never parses it.
+root = ET.parse(sys.argv[1]).getroot()  # nosemgrep: use-defused-xml-parse
 suites = [root] if root.tag == "testsuite" else list(root.iter("testsuite"))
 summary = {k: sum(int(s.get(k, 0)) for s in suites) for k in ("tests", "failures", "errors", "skipped")}
 print(json.dumps({"file": sys.argv[1], **summary}))
