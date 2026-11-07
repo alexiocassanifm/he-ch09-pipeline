@@ -70,7 +70,7 @@ jobs:
       - name: Run the agent on one task, once
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"   # the agent's shell never sees the token
+          CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"   # subprocesses the agent starts do not inherit it
           DISABLE_AUTOUPDATER: "1"
         run: |
           python3 scripts/predict.py \

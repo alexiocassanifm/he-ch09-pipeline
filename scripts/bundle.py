@@ -21,7 +21,6 @@ import pathlib
 import shutil
 import subprocess
 import sys
-import xml.etree.ElementTree as ET
 
 # The files that make up the pipeline and the harness. A change to any of them
 # is a change to the judge, so the manifest pins each one by content hash.
@@ -65,10 +64,10 @@ def sarif_summary(path: pathlib.Path) -> dict:
 
 
 def junit_summary(path: pathlib.Path) -> dict:
-    root = ET.parse(path).getroot()
-    suites = [root] if root.tag == "testsuite" else list(root.iter("testsuite"))
-    total = {k: sum(int(s.get(k, 0)) for s in suites) for k in ("tests", "failures", "errors", "skipped")}
-    return {"file": path.name, **total}
+    # The test job parsed its own XML and wrote these four numbers. They are that
+    # job's claim; whether it passed comes from GitHub's job results, under "jobs".
+    doc = json.loads(path.read_text())
+    return {k: doc.get(k) for k in ("file", "tests", "failures", "errors", "skipped")}
 
 
 def main() -> int:
@@ -106,7 +105,7 @@ def main() -> int:
         "judge": {name: sha256(root / name) for name in JUDGE_FILES},
         "checks": {
             "sarif": [sarif_summary(p) for p in sorted(args.inputs.rglob("*.sarif"))],
-            "junit": [junit_summary(p) for p in sorted(args.inputs.rglob("*.xml"))],
+            "junit": [junit_summary(p) for p in sorted(args.inputs.rglob("junit-*.json"))],
         },
         "agent_runs": [],
     }
@@ -139,7 +138,7 @@ def main() -> int:
     manifest["readings"] = readings
 
     args.out.mkdir(parents=True, exist_ok=True)
-    for p in list(args.inputs.rglob("*.sarif")) + list(args.inputs.rglob("*.xml")):
+    for p in list(args.inputs.rglob("*.sarif")) + list(args.inputs.rglob("junit-*")):
         shutil.copy2(p, args.out / p.name)
     (args.out / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     print(f"bundle written: {len(manifest['checks']['sarif'])} SARIF, "
