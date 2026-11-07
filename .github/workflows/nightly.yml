@@ -87,11 +87,6 @@ jobs:
     needs: agent
     if: always()
     runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      id-token: write
-      attestations: write
-      artifact-metadata: write
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -123,6 +118,20 @@ jobs:
           name: nightly-bundle
           path: bundle
           retention-days: 90
+
+  attest:
+    needs: score
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: nightly-bundle
+          path: bundle
       - uses: actions/attest@v4.2.2
         with:
           subject-path: bundle/manifest.json
