@@ -138,8 +138,9 @@ def main() -> int:
     manifest["readings"] = readings
 
     args.out.mkdir(parents=True, exist_ok=True)
-    for p in list(args.inputs.rglob("*.sarif")) + list(args.inputs.rglob("junit-*")):
-        shutil.copy2(p, args.out / p.name)
+    for p in list(args.inputs.rglob("*.sarif")) + list(args.inputs.rglob("junit-*.json")):
+        if p.is_file():
+            shutil.copy2(p, args.out / p.name)
     (args.out / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     print(f"bundle written: {len(manifest['checks']['sarif'])} SARIF, "
           f"{len(manifest['checks']['junit'])} JUnit, {len(manifest['agent_runs'])} agent runs")
