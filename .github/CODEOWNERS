@@ -1,0 +1,10 @@
+# The judge and the harness: an agent's patch may not change these without a
+# person who can say no. The ruleset requires a code owner's review.
+/.github/            @alexiocassanifm
+/.claude/            @alexiocassanifm
+/CLAUDE.md           @alexiocassanifm
+/.semgrep.yml        @alexiocassanifm
+/evals/              @alexiocassanifm
+/tools/              @alexiocassanifm
+/requirements.lock   @alexiocassanifm
+/deps-allowlist.txt  @alexiocassanifm

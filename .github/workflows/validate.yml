@@ -1,0 +1,138 @@
+# The judge for every change, whoever wrote it. It runs no agent and holds no
+# secret: the job that executes a patch's code can read the repository and
+# nothing else. Code scanning merge protection, set in a ruleset, turns the two
+# SARIF uploads into a gate that fails if either scanner goes missing.
+name: validate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Refuse packages nobody approved
+        run: python scripts/check_deps.py
+      - name: Install exactly what the lock describes
+        run: python -m pip install --require-hashes --no-deps -r requirements.lock
+      - name: Run the suite
+        run: python -m pytest -q --junitxml=junit-${{ matrix.python }}.xml
+      - uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: junit-${{ matrix.python }}
+          path: junit-${{ matrix.python }}.xml
+          retention-days: 90
+
+  semgrep:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: Scan with local rules, image pinned by digest
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src \
+            semgrep/semgrep:1.184.0@sha256:cc1b68266f267878b39739373ea9985b9a78e5d64497dd875c8de100b22695ed \
+            semgrep scan --config .semgrep.yml --metrics off --sarif-output=semgrep.sarif .
+      - uses: github/codeql-action/upload-sarif@v4.39.3
+        if: always()
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+      - uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: sarif-semgrep
+          path: semgrep.sarif
+          retention-days: 90
+
+  gitleaks:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      security-events: write
+    env:
+      GITLEAKS_VERSION: 8.30.1
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install gitleaks, verified against a pinned checksum
+        run: |
+          curl -sSfL -o gitleaks.tgz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tgz" | sha256sum --check
+          tar -xzf gitleaks.tgz gitleaks
+      - name: Scan the commits this change adds, merge commits included
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          range="${BASE:+$BASE..HEAD}"
+          ./gitleaks git --redact --exit-code 0 \
+            --log-opts="--diff-merges=first-parent ${range}" \
+            --report-format sarif --report-path gitleaks.sarif .
+      - uses: github/codeql-action/upload-sarif@v4.39.3
+        if: always()
+        with:
+          sarif_file: gitleaks.sarif
+          category: gitleaks
+      - uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: sarif-gitleaks
+          path: gitleaks.sarif
+          retention-days: 90
+
+  bundle:
+    needs: [test, semgrep, gitleaks]
+    if: always()
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          path: inputs
+      - name: Write the audit manifest
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: python3 scripts/bundle.py --inputs inputs --out bundle --needs "$NEEDS"
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: audit-bundle
+          path: bundle
+          retention-days: 90
+      - uses: actions/attest@v4.2.2
+        with:
+          subject-path: bundle/manifest.json

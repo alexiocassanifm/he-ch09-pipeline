@@ -1,0 +1,11 @@
+id: fix-negative-format
+prompt: |
+  format_cents returns the wrong string for negative amounts: -5 cents comes
+  out as "-1.95". Fix it so negative amounts format correctly.
+checks:
+  - name: the hidden test passes
+    run: python -m pytest -q evals/checks/test_format_negative.py
+  - name: the existing suite still passes
+    run: python -m pytest -q tests
+  - name: the changelog says what changed
+    run: "! git diff --quiet -- CHANGELOG.md"

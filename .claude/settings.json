@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest *)"
+    ],
+    "deny": [
+      "WebFetch",
+      "WebSearch",
+      "Edit(./.github/**)",
+      "Write(./.github/**)",
+      "Edit(./.claude/**)",
+      "Write(./.claude/**)",
+      "Edit(./evals/**)",
+      "Write(./evals/**)",
+      "Edit(./tools/**)",
+      "Write(./tools/**)",
+      "Edit(./CLAUDE.md)",
+      "Write(./CLAUDE.md)",
+      "Edit(./requirements.lock)",
+      "Write(./requirements.lock)"
+    ]
+  }
+}

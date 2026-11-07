@@ -1,0 +1,10 @@
+# Every package that may appear in requirements.lock, one name per line.
+# A code owner reviews every change to this file. An agent that wants a new
+# dependency has to ask a person, because the build fails until one says yes.
+colorama
+iniconfig
+packaging
+pluggy
+pygments
+pytest
+pyyaml

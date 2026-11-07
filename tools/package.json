@@ -1,0 +1,8 @@
+{
+  "name": "pipeline-tools",
+  "private": true,
+  "description": "The Claude Code version the pipeline runs, pinned by the lockfile next to it.",
+  "dependencies": {
+    "@anthropic-ai/claude-code": "2.1.318"
+  }
+}

@@ -1,0 +1,32 @@
+# A nightly suite that stops running fails silently: GitHub delays and, on a
+# quiet public repository, disables scheduled workflows without telling anyone.
+# This job goes red when the last successful nightly run is too old.
+name: liveness
+
+on:
+  schedule:
+    - cron: "41 11 * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+
+jobs:
+  nightly-is-alive:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Fail if no nightly run succeeded in the last 36 hours
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          last=$(gh run list -R "$REPO" --workflow nightly.yml --status success \
+                   --limit 1 --json createdAt --jq '.[0].createdAt // empty')
+          if [ -z "$last" ]; then
+            echo "::error::no successful nightly-evals run on record"; exit 1
+          fi
+          age=$(( $(date +%s) - $(date -d "$last" +%s) ))
+          echo "last successful nightly run: $last (${age}s ago)"
+          if [ "$age" -gt $((36 * 3600)) ]; then
+            echo "::error::the nightly eval-set has not succeeded for $((age / 3600)) hours"; exit 1
+          fi

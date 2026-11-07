@@ -1,0 +1,14 @@
+id: add-split-weighted
+prompt: |
+  Add split_weighted(total_cents, weights) to the installments package. It
+  splits a total in cents into installments proportional to a list of
+  non-negative integer weights. The installments must add up to the total
+  exactly, and leftover cents go to the installments with the largest
+  fractional remainders. Export it from the package and test it.
+checks:
+  - name: the hidden test passes
+    run: python -m pytest -q evals/checks/test_split_weighted.py
+  - name: the existing suite still passes
+    run: python -m pytest -q tests
+  - name: the changelog says what changed
+    run: "! git diff --quiet -- CHANGELOG.md"

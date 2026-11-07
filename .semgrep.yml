@@ -1,0 +1,29 @@
+# Local rules only: the scan reads nothing from a registry at run time, so the
+# same commit is judged by the same rules on every run.
+rules:
+  - id: subprocess-shell-true
+    languages: [python]
+    severity: ERROR
+    message: subprocess called with shell=True; pass an argument list instead.
+    pattern: subprocess.$FUNC(..., shell=True, ...)
+  - id: eval-or-exec
+    languages: [python]
+    severity: ERROR
+    message: eval() or exec() on a value that may come from outside the program.
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: exec(...)
+  - id: yaml-unsafe-load
+    languages: [python]
+    severity: ERROR
+    message: yaml.load without a safe loader can construct arbitrary objects; use yaml.safe_load.
+    patterns:
+      - pattern: yaml.load(...)
+      - pattern-not: yaml.load(..., Loader=yaml.SafeLoader, ...)
+  - id: float-for-money
+    languages: [python]
+    severity: WARNING
+    message: money is held in integer cents in this codebase; float() loses cents.
+    pattern: float(...)
+    paths:
+      include: [src/]
