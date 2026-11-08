@@ -71,7 +71,12 @@ jobs:
       # Without bubblewrap it refuses to start and, without --debug, exits 1
       # with no output at all; without socat the shell is refused.
       - name: Install the sandbox dependencies the credential scrub needs
-        run: sudo apt-get install -y -qq bubblewrap socat
+        run: |
+          sudo apt-get install -y -qq bubblewrap socat
+          # Ubuntu 24.04 restricts unprivileged user namespaces, which the
+          # sandboxed shell needs ("bwrap: setting up uid map: Permission denied").
+          # The runner is ephemeral; the setting dies with it.
+          sudo sysctl -q -w kernel.apparmor_restrict_unprivileged_userns=0
       # claude -p never shows the trust dialog, so on a fresh runner it ignores
       # the allow rules in .claude/settings.json. Trusting the checkout is the
       # documented way to load the harness under test.

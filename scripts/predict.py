@@ -57,7 +57,9 @@ def main() -> int:
         args.claude, "-p", prompt,
         "--model", args.model,
         "--output-format", "stream-json", "--verbose",
-        "--permission-mode", "acceptEdits",
+        # The documented CI shape: deny anything not on an exact allowlist.
+        "--permission-mode", "dontAsk",
+        "--allowedTools", "Read", "Glob", "Grep", "Edit", "Write", "Bash(python -m pytest *)",
         "--max-turns", args.max_turns,
         "--max-budget-usd", args.max_budget_usd,
     ]
