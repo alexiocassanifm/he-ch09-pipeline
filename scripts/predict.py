@@ -64,6 +64,13 @@ def main() -> int:
     started = time.time()
     proc = subprocess.run(cmd, capture_output=True, text=True)
     elapsed = round(time.time() - started, 1)
+    # Last line of defence on a public repository: whatever the agent printed,
+    # the credential this job holds never reaches a stored file.
+    for name in ("CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"):
+        secret = os.environ.get(name)
+        if secret:
+            proc.stdout = proc.stdout.replace(secret, f"[{name} REDACTED]")
+            proc.stderr = proc.stderr.replace(secret, f"[{name} REDACTED]")
     (args.out / "transcript.jsonl").write_text(proc.stdout)
 
     init, result, served = {}, {}, set()
@@ -86,8 +93,11 @@ def main() -> int:
     # The pinned Claude Code lives in tools/node_modules inside the checkout;
     # it is gitignored, and excluded here as well so a patch never carries it.
     sh("git", "add", "--intent-to-add", "--all", check=False)
-    (args.out / "patch.diff").write_text(
-        sh("git", "diff", "--binary", base, "--", ".", ":(exclude)tools/node_modules"))
+    patch = sh("git", "diff", "--binary", base, "--", ".", ":(exclude)tools/node_modules")
+    for name in ("CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"):
+        if os.environ.get(name):
+            patch = patch.replace(os.environ[name], f"[{name} REDACTED]")
+    (args.out / "patch.diff").write_text(patch)
 
     record = {
         "task_id": task_id,
