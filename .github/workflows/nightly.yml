@@ -140,6 +140,16 @@ jobs:
           name: nightly-bundle
           path: bundle
           retention-days: 90
+      # A night where no run produced an answer measured nothing. Fail it, so
+      # the liveness check and a reader of the run list both see it.
+      - name: Fail the night if no run was answered
+        run: |
+          python3 - <<'PY'
+          import json, sys
+          answered = json.load(open("scores.json"))["counts"]["answered"]
+          print(f"answered runs: {answered}")
+          sys.exit(0 if answered else 1)
+          PY
 
   attest:
     needs: score
