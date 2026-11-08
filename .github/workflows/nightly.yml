@@ -67,10 +67,11 @@ jobs:
           node-version: "22"
       - name: Install the pinned Claude Code from its lockfile
         run: npm ci --prefix tools
-      # The credential scrub refuses to start without bubblewrap, and without
-      # --debug it exits 1 with no output at all.
-      - name: Install bubblewrap, which the credential scrub needs
-        run: sudo apt-get install -y -qq bubblewrap
+      # The credential scrub runs the agent's shell in Claude Code's sandbox.
+      # Without bubblewrap it refuses to start and, without --debug, exits 1
+      # with no output at all; without socat the shell is refused.
+      - name: Install the sandbox dependencies the credential scrub needs
+        run: sudo apt-get install -y -qq bubblewrap socat
       # claude -p never shows the trust dialog, so on a fresh runner it ignores
       # the allow rules in .claude/settings.json. Trusting the checkout is the
       # documented way to load the harness under test.
