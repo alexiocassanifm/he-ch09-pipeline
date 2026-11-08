@@ -67,10 +67,32 @@ jobs:
           node-version: "22"
       - name: Install the pinned Claude Code from its lockfile
         run: npm ci --prefix tools
+      # The credential scrub runs the agent's shell in Claude Code's sandbox.
+      # Without bubblewrap it refuses to start and, without --debug, exits 1
+      # with no output at all; without socat the shell is refused.
+      - name: Install the sandbox dependencies the credential scrub needs
+        run: |
+          sudo apt-get install -y -qq bubblewrap socat
+          # Ubuntu 24.04 restricts unprivileged user namespaces, which the
+          # sandboxed shell needs ("bwrap: setting up uid map: Permission denied").
+          # The runner is ephemeral; the setting dies with it.
+          sudo sysctl -q -w kernel.apparmor_restrict_unprivileged_userns=0
+      # claude -p never shows the trust dialog, so on a fresh runner it ignores
+      # the allow rules in .claude/settings.json. Trusting the checkout is the
+      # documented way to load the harness under test.
+      - name: Trust this checkout so its own permission rules load
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib
+          path = pathlib.Path.home() / ".claude.json"
+          doc = json.loads(path.read_text()) if path.exists() else {}
+          doc.setdefault("projects", {}).setdefault(os.environ["GITHUB_WORKSPACE"], {})["hasTrustDialogAccepted"] = True
+          path.write_text(json.dumps(doc))
+          PY
       - name: Run the agent on one task, once
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"   # the agent's shell never sees the token
+          CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"   # subprocesses the agent starts do not inherit it
           DISABLE_AUTOUPDATER: "1"
         run: |
           python3 scripts/predict.py \
@@ -87,11 +109,6 @@ jobs:
     needs: agent
     if: always()
     runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      id-token: write
-      attestations: write
-      artifact-metadata: write
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -123,6 +140,30 @@ jobs:
           name: nightly-bundle
           path: bundle
           retention-days: 90
+      # A night where no run produced an answer measured nothing. Fail it, so
+      # the liveness check and a reader of the run list both see it.
+      - name: Fail the night if no run was answered
+        run: |
+          python3 - <<'PY'
+          import json, sys
+          answered = json.load(open("scores.json"))["counts"]["answered"]
+          print(f"answered runs: {answered}")
+          sys.exit(0 if answered else 1)
+          PY
+
+  attest:
+    needs: score
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: nightly-bundle
+          path: bundle
       - uses: actions/attest@v4.2.2
         with:
           subject-path: bundle/manifest.json

@@ -57,13 +57,22 @@ def main() -> int:
         args.claude, "-p", prompt,
         "--model", args.model,
         "--output-format", "stream-json", "--verbose",
-        "--permission-mode", "acceptEdits",
+        # The documented CI shape: deny anything not on an exact allowlist.
+        "--permission-mode", "dontAsk",
+        "--allowedTools", "Read", "Glob", "Grep", "Edit", "Write", "Bash(python -m pytest *)",
         "--max-turns", args.max_turns,
         "--max-budget-usd", args.max_budget_usd,
     ]
     started = time.time()
     proc = subprocess.run(cmd, capture_output=True, text=True)
     elapsed = round(time.time() - started, 1)
+    # Last line of defence on a public repository: whatever the agent printed,
+    # the credential this job holds never reaches a stored file.
+    for name in ("CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"):
+        secret = os.environ.get(name)
+        if secret:
+            proc.stdout = proc.stdout.replace(secret, f"[{name} REDACTED]")
+            proc.stderr = proc.stderr.replace(secret, f"[{name} REDACTED]")
     (args.out / "transcript.jsonl").write_text(proc.stdout)
 
     init, result, served = {}, {}, set()
@@ -83,8 +92,14 @@ def main() -> int:
             result = event
 
     # Untracked files count as changes too: mark them intent-to-add, then diff.
+    # The pinned Claude Code lives in tools/node_modules inside the checkout;
+    # it is gitignored, and excluded here as well so a patch never carries it.
     sh("git", "add", "--intent-to-add", "--all", check=False)
-    (args.out / "patch.diff").write_text(sh("git", "diff", "--binary", base))
+    patch = sh("git", "diff", "--binary", base, "--", ".", ":(exclude)tools/node_modules")
+    for name in ("CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"):
+        if os.environ.get(name):
+            patch = patch.replace(os.environ[name], f"[{name} REDACTED]")
+    (args.out / "patch.diff").write_text(patch)
 
     record = {
         "task_id": task_id,
@@ -112,7 +127,11 @@ def main() -> int:
         "runner": {k: os.environ.get(k) for k in ("ImageOS", "ImageVersion", "RUNNER_OS")},
     }
     (args.out / "run.json").write_text(json.dumps(record, indent=2) + "\n")
-    print(json.dumps({k: record[k] for k in ("task_id", "trial", "models_served", "is_error", "num_turns")}))
+    print(json.dumps({k: record[k] for k in ("task_id", "trial", "models_served", "is_error",
+                                               "num_turns", "terminal_reason", "exit_code")}))
+    if record["is_error"]:
+        # The log is public on a public repository: print the tail, never the environment.
+        print("claude stderr (tail):\n" + proc.stderr[-1500:])
     # Always exit 0: a failed agent run is a result to grade, not a broken job.
     return 0
 

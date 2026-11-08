@@ -36,11 +36,16 @@ jobs:
         run: python -m pip install --require-hashes --no-deps -r requirements.lock
       - name: Run the suite
         run: python -m pytest -q --junitxml=junit-${{ matrix.python }}.xml
+      - name: Summarize the report here, where the patch's own output is parsed
+        if: always()
+        run: python scripts/junit_summary.py junit-${{ matrix.python }}.xml > junit-${{ matrix.python }}.json
       - uses: actions/upload-artifact@v7.0.2
         if: always()
         with:
           name: junit-${{ matrix.python }}
-          path: junit-${{ matrix.python }}.xml
+          path: |
+            junit-${{ matrix.python }}.xml
+            junit-${{ matrix.python }}.json
           retention-days: 90
 
   semgrep:
@@ -112,11 +117,6 @@ jobs:
     needs: [test, semgrep, gitleaks]
     if: always()
     runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      id-token: write
-      attestations: write
-      artifact-metadata: write
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -133,6 +133,23 @@ jobs:
           name: audit-bundle
           path: bundle
           retention-days: 90
+
+  # Signing depends on Sigstore's public transparency log. It is a separate job
+  # and not a required check, so an outage of the log cannot block a merge; the
+  # bundle is already recorded, and this job can be re-run when the log is back.
+  attest:
+    needs: bundle
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: audit-bundle
+          path: bundle
       - uses: actions/attest@v4.2.2
         with:
           subject-path: bundle/manifest.json
