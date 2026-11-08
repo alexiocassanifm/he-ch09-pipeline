@@ -47,7 +47,8 @@ def main() -> int:
         subprocess.run(["git", "worktree", "add", "--detach", str(work), record["base_commit"]],
                        cwd=repo, check=True, capture_output=True)
 
-        patch = record_path.parent / "patch.diff"
+        # Absolute: git apply runs inside the worktree, not where the runs were downloaded.
+        patch = (record_path.parent / "patch.diff").resolve()
         failed = []
         if record["is_error"] and patch.stat().st_size == 0:
             outcome, failed = "error", ["the agent run ended in error and changed nothing"]
